@@ -1,0 +1,50 @@
+name: football_prediction_app
+description: Aplicación de análisis y predicción deportiva de fútbol.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Networking
+  dio: ^5.4.3+1
+
+  # Models
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # UI
+  cached_network_image: ^3.3.1
+  fl_chart: ^0.69.0
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.19.0
+  flutter_dotenv: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+  # Nota (2026): build_runner/freezed/json_serializable/riverpod_generator/custom_lint/
+  # riverpod_lint/mocktail excluidos temporalmente del build del APK por incompatibilidad
+  # analyzer vs Dart 3.13. El código de runtime no los necesita (models escritos a mano).
+  # Re-agregar cuando se actualicen los paquetes.
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
