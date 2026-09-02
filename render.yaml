@@ -30,7 +30,7 @@ services:
       - key: CORS_ORIGINS
         value: "*"
 
-      # PostgreSQL (inyectado por Render desde la DB gestionada)
+      # PostgreSQL (inyectado por Render — host en lugar de hostname)
       - key: DATABASE_URL
         fromDatabase:
           name: football-prediction-db
@@ -38,7 +38,7 @@ services:
       - key: POSTGRES_HOST
         fromDatabase:
           name: football-prediction-db
-          property: hostname
+          property: host
       - key: POSTGRES_PORT
         fromDatabase:
           name: football-prediction-db
