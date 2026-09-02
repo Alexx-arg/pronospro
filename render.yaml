@@ -56,17 +56,23 @@ services:
           name: football-prediction-db
           property: password
 
-      # API-Football (rellena con tu key real de https://dashboard.api-football.com)
+      # Data Provider — Bzzoiro (actual)
       - key: DATA_PROVIDER
-        value: api_football
-      - key: API_FOOTBALL_KEY
+        value: bzzoiro
+      - key: BZZOIRO_API_KEY
         sync: false
-      - key: API_FOOTBALL_BASE_URL
-        value: https://v3.football.api-sports.io
-      - key: API_FOOTBALL_RATE_LIMIT_PER_MIN
-        value: 30
-      - key: API_FOOTBALL_RATE_LIMIT_PER_DAY
-        value: 300
+      - key: BZZOIRO_API_URL
+        value: https://sports.bzzoiro.com/api/v2
+      - key: BZZOIRO_MODEL
+        value: muse-spark-1.2-free
+
+      # API-Football (legacy, si lo necesitas en el futuro)
+      # - key: DATA_PROVIDER
+      #   value: api_football
+      # - key: API_FOOTBALL_KEY
+      #   sync: false
+      # - key: API_FOOTBALL_BASE_URL
+      #   value: https://v3.football.api-sports.io
 
       # NVIDIA NIM (explicaciones IA)
       - key: NVIDIA_API_KEY
@@ -82,7 +88,7 @@ services:
       - key: CURRENT_LEAGUES
         value: 39,140,61,135,78
       - key: CURRENT_SEASON_YEAR
-        value: 2025
+        value: 2024
 
 databases:
   - name: football-prediction-db
