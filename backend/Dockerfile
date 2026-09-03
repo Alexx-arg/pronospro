@@ -40,5 +40,8 @@ COPY data/models/final/lightgbm_production.joblib ./data/models/final/lightgbm_p
 
 EXPOSE 8000
 
+# Script de arranque: corre migraciones antes de servir (evita dependencia de shell Render)
+RUN echo '#!/bin/sh\nalembic upgrade head\nexec uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}' > /app/start.sh && chmod +x /app/start.sh
+
 # FastAPI con lifespan (carga única), escucha en el puerto que Render asigna (PORT)
-CMD sh -c "uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+CMD ["sh", "/app/start.sh"]
