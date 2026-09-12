@@ -747,7 +747,6 @@ def upgrade() -> None:
         "idx_predictions_created",
         "predictions",
         ["created_at"],
-        postgresql_using="gin",
     )
 
     # ============================================================

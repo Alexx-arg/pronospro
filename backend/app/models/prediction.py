@@ -134,9 +134,7 @@ class Prediction(Base, CreatedAtMixin):
         ),
         Index("idx_predictions_model", "model_version_id", "created_at"),
         Index("idx_predictions_fixture", "fixture_id"),
-        Index(
-            "idx_predictions_created",
-            "created_at",
-            postgresql_using="gin",
-        ),
+        # created_at es un timestamp; el índice GIN era inválido aquí (GIN es
+        # para JSONB como features_snapshot). Lo quito para que alembic no falle.
+        Index("idx_predictions_created", "created_at"),
     )
