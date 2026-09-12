@@ -25,6 +25,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# libgomp1 (OpenMP) es requerido por LightGBM en runtime (libgomp.so.1)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copia deps instaladas del builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
