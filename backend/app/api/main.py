@@ -43,10 +43,15 @@ async def lifespan(app: FastAPI) -> Any:
             app.state.model = model
             app.state.model_path = str(model_path)
             app.state.model_version = getattr(model, "model_version", "production")
-        except Exception:
+        except Exception as exc:
+            # Loggear el error real para diagnóstico (antes se tragaba silenciosamente)
+            import traceback
+            traceback.print_exc()
+            print(f"[model] failed to load {model_path}: {exc!r}", flush=True)
             app.state.model = None
             app.state.model_path = None
     else:
+        print("[model] no model file found at any candidate path", flush=True)
         app.state.model = None
         app.state.model_path = None
     yield
