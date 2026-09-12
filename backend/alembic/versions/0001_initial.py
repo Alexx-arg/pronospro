@@ -1002,8 +1002,8 @@ def _install_triggers_and_roles() -> None:
         "prediction_outcomes",
         "prediction_explanations",
     }:
-        # Public schema sequences (the BIGSERIAL PKs) need USAGE for INSERT.
-        bind.execute(sa.text("GRANT USAGE, SELECT ON SCHEMA public TO app_user;"))
+        # Public schema: solo USAGE (SELECT no es privilegio válido sobre schemas en PG).
+        bind.execute(sa.text("GRANT USAGE ON SCHEMA public TO app_user;"))
         bind.execute(sa.text(f"GRANT SELECT, INSERT ON {tbl} TO app_user;"))
         # Sequence for SERIAL/BIGSERIAL PK autoincrement.
         bind.execute(sa.text(f"GRANT USAGE, SELECT ON SEQUENCE {tbl}_id_seq TO app_user;"))
