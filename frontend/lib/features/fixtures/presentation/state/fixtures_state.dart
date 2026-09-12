@@ -1,4 +1,4 @@
-import '../../data/models/fixture_response.dart';
+import 'package:football_prediction_app/features/fixtures/fixtures.dart';
 
 sealed class FixturesState {
   const FixturesState();

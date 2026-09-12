@@ -1,7 +1,7 @@
 name: football_prediction_app
-description: Aplicación de análisis y predicción deportiva de fútbol.
+description: PronosPro — análisis y predicción deportiva de fútbol con IA.
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -38,11 +38,20 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
 
   # Nota (2026): build_runner/freezed/json_serializable/riverpod_generator/custom_lint/
   # riverpod_lint/mocktail excluidos temporalmente del build del APK por incompatibilidad
   # analyzer vs Dart 3.13. El código de runtime no los necesita (models escritos a mano).
   # Re-agregar cuando se actualicen los paquetes.
+
+# Icono de app generado por flutter_launcher_icons a partir de assets/icon/icon.png
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#1D4ED8"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
 
 flutter:
   uses-material-design: true

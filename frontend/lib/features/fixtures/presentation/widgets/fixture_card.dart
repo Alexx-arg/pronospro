@@ -1,105 +1,61 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'package:football_prediction_app/features/fixtures/fixtures.dart';
 import 'package:football_prediction_app/core/network/api_client.dart';
+import 'package:football_prediction_app/features/fixtures/fixtures.dart';
 
-class FixtureCard extends StatelessWidget {
-  const FixtureCard({
-    super.key,
-    required this.fixture,
-  });
+/// Enumeración de mercados a visualizar en la tarjeta.
+enum FixtureMarket { w1x2, goals, metrics }
+
+class FixtureCard extends StatefulWidget {
+  const FixtureCard({super.key, required this.fixture});
 
   final FixtureResponse fixture;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+  State<FixtureCard> createState() => _FixtureCardState();
+}
 
-    final probHome = fixture.prediction?.homeProbability;
-    final probDraw = fixture.prediction?.drawProbability;
-    final probAway = fixture.prediction?.awayProbability;
+class _FixtureCardState extends State<FixtureCard> {
+  FixtureMarket _market = FixtureMarket.w1x2;
+
+  @override
+  Widget build(BuildContext context) {
+    final fixture = widget.fixture;
+    final scheme = Theme.of(context).colorScheme;
 
     return Card(
       elevation: 1,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _showDetail(context),
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // League and time
+              // Time + venue + status
+              _TopRow(fixture: fixture),
+              const SizedBox(height: 10),
+              // Teams with logos
               Row(
                 children: [
-                  if (fixture.competition.logo != null)
-                    Image.network(
-                      fixture.competition.logo!,
-                      width: 20,
-                      height: 20,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.sports_soccer, size: 20),
-                    )
-                  else
-                    const Icon(Icons.sports_soccer, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    fixture.competition.name,
-                    style: textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: scheme.primary,
-                    ),
+                  _TeamColumn(team: fixture.homeTeam),
+                  Expanded(
+                    child: _CenterScore(fixture: fixture),
                   ),
-                  const Spacer(),
-                  Text(
-                    DateFormat('EEE dd MMM • HH:mm', 'es').format(fixture.kickoffTime.toLocal()),
-                    style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
+                  _TeamColumn(team: fixture.awayTeam),
                 ],
               ),
-              const SizedBox(height: 12),
-              // Teams
-              Row(
-                children: [
-                  _TeamWidget(team: fixture.homeTeam, isHome: true),
-                  const Spacer(),
-                  const Text('vs', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  _TeamWidget(team: fixture.awayTeam, isHome: false),
-                ],
-              ),
-              if (fixture.venue != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, size: 14, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        fixture.venue!,
-                        style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              // Probabilities if available
-              if (probHome != null && probDraw != null && probAway != null) ...[
-                const SizedBox(height: 12),
-                _ProbabilityRow(
-                  homeLabel: fixture.homeTeam.shortName ?? fixture.homeTeam.name,
-                  homeProb: probHome,
-                  drawProb: probDraw,
-                  awayProb: probAway,
-                  awayLabel: fixture.awayTeam.shortName ?? fixture.awayTeam.name,
-                  modelVersion: fixture.prediction?.modelVersion,
-                ),
-              ],
+              const SizedBox(height: 10),
+              // Market selector chips
+              _MarketSelector(market: _market, onChanged: _setMarket, scheme: scheme),
+              const SizedBox(height: 8),
+              // Market body
+              _buildMarketBody(fixture, scheme),
             ],
           ),
         ),
@@ -107,64 +63,122 @@ class FixtureCard extends StatelessWidget {
     );
   }
 
+  void _setMarket(FixtureMarket m) => setState(() => _market = m);
+
+  Widget _buildMarketBody(FixtureResponse fixture, ColorScheme scheme) {
+    final markets = fixture.markets;
+    switch (_market) {
+      case FixtureMarket.w1x2:
+        final w = markets?.w1x2;
+        if (w == null) return const _NoMarket('Sin predicción 1X2 todavía');
+        return _W1X2Body(w1x2: w, scheme: scheme);
+      case FixtureMarket.goals:
+        final g = markets?.goals;
+        if (g == null || (g.overUnder25 == null && g.btts == null)) {
+          return const _NoMarket('Sin mercados de goles todavía');
+        }
+        return _GoalsBody(goals: g, scheme: scheme);
+      case FixtureMarket.metrics:
+        final m = markets?.metrics;
+        if (m == null) return const _NoMarket('Sin métricas todavía');
+        return _MetricsBody(metrics: m, scheme: scheme);
+    }
+  }
+
   void _showDetail(BuildContext context) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _FixtureDetailBottomSheet(fixture: fixture),
+      builder: (context) => FixtureDetailSheet(fixture: widget.fixture),
     );
   }
 }
 
-class _TeamWidget extends StatelessWidget {
-  const _TeamWidget({
-    required this.team,
-    required this.isHome,
-  });
+class _TopRow extends StatelessWidget {
+  const _TopRow({required this.fixture});
+  final FixtureResponse fixture;
 
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final time = DateFormat('HH:mm', 'es').format(fixture.kickoffTime.toLocal());
+    return Row(
+      children: [
+        Text(
+          time,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+              ),
+        ),
+        const SizedBox(width: 8),
+        if (fixture.venue != null)
+          Expanded(
+            child: Text(
+              fixture.venue!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Logo con caché + fallback elegante.
+class TeamLogo extends StatelessWidget {
+  const TeamLogo({super.key, required this.logo, this.size = 40});
+
+  final String? logo;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (logo != null && logo!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: logo!,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => _fallback(scheme),
+        errorWidget: (_, __, ___) => _fallback(scheme),
+      );
+    }
+    return _fallback(scheme);
+  }
+
+  Widget _fallback(ColorScheme scheme) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.shield, size: size * 0.55, color: scheme.outline),
+    );
+  }
+}
+
+class _TeamColumn extends StatelessWidget {
+  const _TeamColumn({required this.team});
   final TeamInfo team;
-  final bool isHome;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 80,
+      width: 76,
       child: Column(
         children: [
-          if (team.logo != null)
-            Image.network(
-              team.logo!,
-              width: 40,
-              height: 40,
-              errorBuilder: (_, __, ___) => Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.shield, size: 24),
-              ),
-            )
-          else
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.shield, size: 24),
-            ),
-          const SizedBox(height: 4),
+          TeamLogo(logo: team.logo, size: 40),
+          const SizedBox(height: 6),
           Text(
             team.shortName ?? team.name,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -173,279 +187,123 @@ class _TeamWidget extends StatelessWidget {
   }
 }
 
-class _ProbabilityRow extends StatelessWidget {
-  const _ProbabilityRow({
-    required this.homeLabel,
-    required this.homeProb,
-    required this.drawProb,
-    required this.awayProb,
-    required this.awayLabel,
-    this.modelVersion,
-  });
-
-  final String homeLabel;
-  final double homeProb;
-  final double drawProb;
-  final double awayProb;
-  final String awayLabel;
-  final String? modelVersion;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final maxProb = [homeProb, drawProb, awayProb].reduce((a, b) => a > b ? a : b);
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _ProbBar(
-                label: homeLabel,
-                prob: homeProb,
-                isFavorite: homeProb == maxProb,
-                color: scheme.primary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ProbBar(
-                label: 'X',
-                prob: drawProb,
-                isFavorite: drawProb == maxProb,
-                color: scheme.secondary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ProbBar(
-                label: awayLabel,
-                prob: awayProb,
-                isFavorite: awayProb == maxProb,
-                color: scheme.tertiary,
-              ),
-            ),
-          ],
-        ),
-        if (modelVersion != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            'Modelo: $modelVersion',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey,
-            ),
-            textAlign: TextAlign.end,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ProbBar extends StatelessWidget {
-  const _ProbBar({
-    required this.label,
-    required this.prob,
-    required this.isFavorite,
-    required this.color,
-  });
-
-  final String label;
-  final double prob;
-  final bool isFavorite;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: isFavorite ? color.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: isFavorite ? Border.all(color: color, width: 1.5) : null,
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: isFavorite ? color : null,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          LinearProgressIndicator(
-            value: prob.clamp(0.0, 1.0),
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-            color: color,
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${(prob * 100).toStringAsFixed(1)}%',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FixtureDetailBottomSheet extends StatelessWidget {
-  const _FixtureDetailBottomSheet({
-    required this.fixture,
-  });
-
+class _CenterScore extends StatelessWidget {
+  const _CenterScore({required this.fixture});
   final FixtureResponse fixture;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    if (fixture.status == 'finished' &&
+        fixture.homeGoals != null &&
+        fixture.awayGoals != null) {
+      return Text(
+        '${fixture.homeGoals} - ${fixture.awayGoals}',
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+      );
+    }
+    return Text(
+      'vs',
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+}
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+class _MarketSelector extends StatelessWidget {
+  const _MarketSelector({
+    required this.market,
+    required this.onChanged,
+    required this.scheme,
+  });
+
+  final FixtureMarket market;
+  final void Function(FixtureMarket) onChanged;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _chip(context, FixtureMarket.w1x2, '1X2', Icons.sports),
+        const SizedBox(width: 6),
+        _chip(context, FixtureMarket.goals, 'Goles', Icons.sports_soccer),
+        const SizedBox(width: 6),
+        _chip(context, FixtureMarket.metrics, 'Métricas', Icons.query_stats),
+      ],
+    );
+  }
+
+  Widget _chip(BuildContext context, FixtureMarket m, String label, IconData icon) {
+    final selected = m == market;
+    return GestureDetector(
+      onTap: () => onChanged(m),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? scheme.secondaryContainer : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.outline,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+            Icon(icon, size: 16, color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
             ),
-            const SizedBox(height: 20),
-            // Match header
-            Row(
-              children: [
-                _TeamWidget(team: fixture.homeTeam, isHome: true),
-                const Spacer(),
-                Column(
-                  children: [
-                    Text(
-                      'vs',
-                      style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                    Text(
-                      DateFormat('EEE dd MMM • HH:mm', 'es').format(fixture.kickoffTime.toLocal()),
-                      style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                _TeamWidget(team: fixture.awayTeam, isHome: false),
-              ],
-            ),
-            if (fixture.venue != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.location_on, size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text(fixture.venue!, style: textTheme.bodyMedium),
-                ],
-              ),
-            ],
-            const SizedBox(height: 24),
-            // Prediction
-            if (fixture.prediction != null) ...[
-              Text('Predicción', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _PredictionBars(prediction: fixture.prediction!),
-              const SizedBox(height: 24),
-            ],
-            // Metrics
-            if (fixture.metrics != null) ...[
-              Text('Métricas del Partido', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _MetricsGrid(metrics: fixture.metrics!, homeTeam: fixture.homeTeam.name, awayTeam: fixture.awayTeam.name),
-              const SizedBox(height: 24),
-            ],
-            // AI Explain button
-            if (fixture.prediction != null) ...[
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('Analizar con IA (NVIDIA)'),
-                  onPressed: () => _showExplanation(context),
-                ),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
-
-  void _showExplanation(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _ExplanationBottomSheet(fixture: fixture),
-    );
-  }
 }
 
-class _PredictionBars extends StatelessWidget {
-  const _PredictionBars({required this.prediction});
-
-  final PredictionInfo prediction;
+class _W1X2Body extends StatelessWidget {
+  const _W1X2Body({required this.w1x2, required this.scheme});
+  final W1X2Market w1x2;
+  final ColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final probs = [
-      ('Local', prediction.homeProbability, scheme.primary),
-      ('Empate', prediction.drawProbability, scheme.secondary),
-      ('Visitante', prediction.awayProbability, scheme.tertiary),
+      ('1', w1x2.home, scheme.primary),
+      ('X', w1x2.draw, scheme.secondary),
+      ('2', w1x2.away, scheme.tertiary),
     ];
-    final maxProb = probs.reduce((a, b) => a.$2 > b.$2 ? a : b).$2;
-
-    return Column(
+    final maxProb = [w1x2.home, w1x2.draw, w1x2.away].reduce((a, b) => a > b ? a : b);
+    return Row(
       children: probs.map((p) {
-        final isFav = p.$2 == maxProb;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isFav ? p.$3.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: isFav ? Border.all(color: p.$3, width: 1.5) : null,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(p.$1, style: TextStyle(fontWeight: FontWeight.bold, color: isFav ? p.$3 : null)),
-                ),
-                LinearProgressIndicator(
-                  value: p.$2.clamp(0.0, 1.0),
-                  backgroundColor: scheme.surfaceContainerHighest,
-                  color: p.$3,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                const SizedBox(width: 12),
-                Text('${(p.$2 * 100).toStringAsFixed(1)}%',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: p.$3)),
-              ],
+        final fav = p.$2 == maxProb;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: fav ? p.$3.withOpacity(0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: fav ? Border.all(color: p.$3, width: 1.5) : null,
+              ),
+              child: Column(
+                children: [
+                  Text('${(p.$2 * 100).toStringAsFixed(0)}%',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: fav ? p.$3 : scheme.onSurface,
+                          )),
+                  Text(p.$1,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
+              ),
             ),
           ),
         );
@@ -454,159 +312,324 @@ class _PredictionBars extends StatelessWidget {
   }
 }
 
-class _MetricsGrid extends StatelessWidget {
-  const _MetricsGrid({
-    required this.metrics,
-    required this.homeTeam,
-    required this.awayTeam,
-  });
-
-  final MatchMetrics metrics;
-  final String homeTeam;
-  final String awayTeam;
+class _GoalsBody extends StatelessWidget {
+  const _GoalsBody({required this.goals, required this.scheme});
+  final GoalsMarket goals;
+  final ColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final items = <_MetricItem>[
-      if (metrics.homeForm != null || metrics.awayForm != null)
-        _MetricItem('Forma', metrics.homeForm ?? '-', metrics.awayForm ?? '-'),
-      if (metrics.homeXg != null || metrics.awayXg != null)
-        _MetricItem('xG', metrics.homeXg!.toStringAsFixed(2), metrics.awayXg!.toStringAsFixed(2)),
-      if (metrics.homeXga != null || metrics.awayXga != null)
-        _MetricItem('xGA', metrics.homeXga!.toStringAsFixed(2), metrics.awayXga!.toStringAsFixed(2)),
-      if (metrics.homeCornersAvg != null || metrics.awayCornersAvg != null)
-        _MetricItem('Córners/partido', metrics.homeCornersAvg!.toStringAsFixed(1), metrics.awayCornersAvg!.toStringAsFixed(1)),
-      if (metrics.homeYellowCardsAvg != null || metrics.awayYellowCardsAvg != null)
-        _MetricItem('Amarillas/partido', metrics.homeYellowCardsAvg!.toStringAsFixed(1), metrics.awayYellowCardsAvg!.toStringAsFixed(1)),
-      if (metrics.homePossessionAvg != null || metrics.awayPossessionAvg != null)
-        _MetricItem('Posesión %', '${metrics.homePossessionAvg!.toStringAsFixed(1)}%', '${metrics.awayPossessionAvg!.toStringAsFixed(1)}%'),
-    ];
-
     return Column(
       children: [
-        Row(
-          children: [
-            const Expanded(child: SizedBox()),
-            Text(homeTeam, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary)),
-            const SizedBox(width: 16),
-            Text(awayTeam, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.tertiary)),
-            const Expanded(child: SizedBox()),
-          ],
+        if (goals.overUnder25 != null) _MarketBarPair(
+          label: 'Over 2.5',
+          a: goals.overUnder25!.over,
+          b: goals.overUnder25!.under,
+          bLabel: 'Under 2.5',
+          leftColor: scheme.primary,
+          rightColor: scheme.outline,
         ),
         const SizedBox(height: 8),
-        ...items.map((item) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              const Expanded(child: SizedBox()),
-              Text(item.label, style: TextStyle(color: scheme.onSurfaceVariant)),
-              const SizedBox(width: 16),
-              Text(item.homeValue, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary)),
-              const SizedBox(width: 16),
-              Text(item.awayValue, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.tertiary)),
-              const Expanded(child: SizedBox()),
-            ],
-          ),
-        )),
+        if (goals.btts != null) _MarketBarPair(
+          label: 'BTTS Sí',
+          a: goals.btts!.yes,
+          b: goals.btts!.no,
+          bLabel: 'No',
+          leftColor: scheme.tertiary,
+          rightColor: scheme.outline,
+        ),
       ],
     );
   }
 }
 
-class _MetricItem {
-  const _MetricItem(this.label, this.homeValue, this.awayValue);
+class _MarketBarPair extends StatelessWidget {
+  const _MarketBarPair({
+    required this.label,
+    required this.a,
+    required this.b,
+    required this.bLabel,
+    required this.leftColor,
+    required this.rightColor,
+  });
+
   final String label;
-  final String homeValue;
-  final String awayValue;
-}
-
-class _ExplanationBottomSheet extends ConsumerStatefulWidget {
-  const _ExplanationBottomSheet({required this.fixture});
-  final FixtureResponse fixture;
-
-  @override
-  ConsumerState<_ExplanationBottomSheet> createState() => _ExplanationBottomSheetState();
-}
-
-class _ExplanationBottomSheetState extends ConsumerState<_ExplanationBottomSheet> {
-  String? _explanation;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchExplanation();
-  }
-
-  Future<void> _fetchExplanation() async {
-    setState(() => _loading = true);
-    final apiClient = ref.read(apiClientProvider);
-    try {
-      final prediction = widget.fixture.prediction!;
-      final response = await apiClient.dio.post(
-        '/api/v1/explain',
-        data: {
-          'fixture_id': widget.fixture.id,
-          'prob_home': prediction.homeProbability,
-          'prob_draw': prediction.drawProbability,
-          'prob_away': prediction.awayProbability,
-          'home_team': widget.fixture.homeTeam.name,
-          'away_team': widget.fixture.awayTeam.name,
-          'metrics': widget.fixture.metrics?.toJson(),
-        },
-      );
-      if (response.statusCode == 200) {
-        setState(() => _explanation = response.data['explanation'] as String?);
-      } else {
-        setState(() => _explanation = 'Error: ${response.data['detail'] ?? 'Desconocido'}');
-      }
-    } catch (e) {
-      setState(() => _explanation = 'Error de conexión: $e');
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
+  final double a;
+  final double b;
+  final String bLabel;
+  final Color leftColor;
+  final Color rightColor;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final aPct = (a * 100).toStringAsFixed(0);
+    final bPct = (b * 100).toStringAsFixed(0);
+    return Row(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Icon(Icons.trending_up, size: 16, color: leftColor),
+              const SizedBox(width: 4),
+              Text('$label $aPct%',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: leftColor, fontSize: 13)),
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: a.clamp(0.0, 1.0),
+                  minHeight: 8,
+                  backgroundColor: scheme.surfaceContainerHighest,
+                  valueColor: AlwaysStoppedAnimation(leftColor),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text('$bLabel $bPct%',
+            style: TextStyle(fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant, fontSize: 13)),
+      ],
+    );
+  }
+}
 
+class _MetricsBody extends StatelessWidget {
+  const _MetricsBody({required this.metrics, required this.scheme});
+  final MatchMetrics metrics;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(String, String?, String?)>[
+      ('xG', _fmt(metrics.homeXg), _fmt(metrics.awayXg)),
+      ('Córners', _fmt(metrics.homeCornersAvg), _fmt(metrics.awayCornersAvg)),
+      ('Tarjetas', _fmt(metrics.homeYellowCardsAvg), _fmt(metrics.awayYellowCardsAvg)),
+    ];
+    return Column(
+      children: rows.where((r) => r.$2 != null || r.$3 != null).map((r) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(r.$2 ?? '-',
+                    textAlign: TextAlign.start,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Text(r.$1, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+              Expanded(
+                child: Text(r.$3 ?? '-',
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  static String? _fmt(double? v) => v == null ? null : v.toStringAsFixed(1);
+}
+
+class _NoMarket extends StatelessWidget {
+  const _NoMarket(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+      ),
+    );
+  }
+}
+
+/// Detalle en Modal Bottom Sheet con botón IA prominente.
+class FixtureDetailSheet extends StatelessWidget {
+  const FixtureDetailSheet({super.key, required this.fixture});
+
+  final FixtureResponse fixture;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Análisis IA', style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Header teams
+              Row(
+                children: [
+                  _TeamColumn(team: fixture.homeTeam),
+                  Expanded(
+                    child: Text(
+                      'vs',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  _TeamColumn(team: fixture.awayTeam),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${fixture.competition.name} · ${DateFormat('EEE dd MMM HH:mm', 'es').format(fixture.kickoffTime.toLocal())}',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+              if (fixture.venue != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  fixture.venue!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else if (_explanation != null)
-              Expanded(
+              const SizedBox(height: 20),
+              if (fixture.markets?.w1x2 != null) ...[
+                _W1X2Body(w1x2: fixture.markets!.w1x2!, scheme: scheme),
+                const SizedBox(height: 20),
+              ],
+              if (fixture.markets?.goals != null) ...[
+                _GoalsBody(goals: fixture.markets!.goals!, scheme: scheme),
+                const SizedBox(height: 20),
+              ],
+              if (fixture.markets?.metrics != null) ...[
+                Text('Métricas', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                _MetricsBody(metrics: fixture.markets!.metrics!, scheme: scheme),
+                const SizedBox(height: 20),
+              ],
+              _AiButton(fixture: fixture),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiButton extends ConsumerWidget {
+  const _AiButton({required this.fixture});
+
+  final FixtureResponse fixture;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final w = fixture.markets?.w1x2;
+    if (w == null) {
+      return const SizedBox.shrink();
+    }
+    return FilledButton.icon(
+      icon: const Icon(Icons.auto_awesome),
+      label: const Text('✨ Analizar con IA (NVIDIA)'),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+        foregroundColor: Theme.of(context).colorScheme.onTertiaryContainer,
+      ),
+      onPressed: () async {
+        final client = ref.read(apiClientProvider);
+        final explanation = await _fetchExplanation(client, fixture, w);
+        if (context.mounted) {
+          _showExplanationSheet(context, explanation);
+        }
+      },
+    );
+  }
+
+  Future<String> _fetchExplanation(
+    ApiClient client,
+    FixtureResponse fixture,
+    W1X2Market w,
+  ) async {
+    try {
+      final resp = await client.dio.post<Map<String, dynamic>>(
+        '/api/v1/explain',
+        data: {
+          'fixture_id': fixture.id,
+          'prob_home': w.home,
+          'prob_draw': w.draw,
+          'prob_away': w.away,
+          'home_team': fixture.homeTeam.name,
+          'away_team': fixture.awayTeam.name,
+          'metrics': fixture.markets?.metrics?.toJson(),
+        },
+      );
+      final data = resp.data;
+      return (data != null ? data['explanation'] as String? : null) ?? 'Sin explicación.';
+    } catch (e) {
+      return 'No se pudo obtener la explicación IA.';
+    }
+  }
+
+  void _showExplanationSheet(BuildContext context, String text) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+        decoration: BoxDecoration(
+          color: Theme.of(ctx).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.amber),
+                  const SizedBox(width: 8),
+                  Text('Análisis IA',
+                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Flexible(
                 child: SingleChildScrollView(
-                  child: Text(_explanation!, style: textTheme.bodyLarge),
+                  child: Text(text, style: Theme.of(ctx).textTheme.bodyMedium),
                 ),
-              )
-            else
-              Text('No se pudo generar la explicación', style: textTheme.bodyMedium?.copyWith(color: Colors.red)),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

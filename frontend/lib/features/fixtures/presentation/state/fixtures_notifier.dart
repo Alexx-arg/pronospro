@@ -9,79 +9,36 @@ final fixturesRepositoryProvider = Provider<FixturesRepository>((ref) {
   return FixturesRepositoryImpl(apiClient: client);
 });
 
+/// Selected day (stored as a day-index offset: -1 ayer, 0 hoy, +n).
+final selectedDateProvider = StateProvider<int>((ref) => 0);
+
 final fixturesNotifierProvider =
     StateNotifierProvider<FixturesNotifier, FixturesState>((ref) {
   final repo = ref.read(fixturesRepositoryProvider);
   return FixturesNotifier(repo);
 });
 
-final fixtureDetailProvider =
-    StateNotifierProvider<FixtureDetailNotifier, FixtureDetailState>((ref) {
-  final repo = ref.read(fixturesRepositoryProvider);
-  return FixtureDetailNotifier(repo);
-});
-
 class FixturesNotifier extends StateNotifier<FixturesState> {
   FixturesNotifier(this._repository) : super(const FixturesInitial());
 
   final FixturesRepository _repository;
-  int _offset = 0;
-  final int _limit = 20;
-  bool _hasReachedMax = false;
 
-  Future<void> loadUpcoming({
+  Future<void> loadForDate(
+    DateTime day, {
     int? competitionId,
-    int? seasonId,
-    int? teamId,
-    DateTime? from,
-    DateTime? to,
-    bool includeMetrics = false,
-    bool includePrediction = false,
     bool refresh = false,
   }) async {
-    if (refresh) {
-      _offset = 0;
-      _hasReachedMax = false;
-      state = const FixturesLoading();
-    } else if (state is FixturesLoading || _hasReachedMax) {
-      return;
-    }
-
+    state = const FixturesLoading();
     try {
       final result = await _repository.getUpcoming(
+        date: day,
         competitionId: competitionId,
-        seasonId: seasonId,
-        teamId: teamId,
-        from: from,
-        to: to,
-        limit: _limit,
-        offset: _offset,
-        includeMetrics: includeMetrics,
-        includePrediction: includePrediction,
+        limit: 100,
+        offset: 0,
+        includeMetrics: true,
+        includePrediction: true,
       );
-
-      if (refresh || _offset == 0) {
-        state = FixturesSuccess(
-          result,
-          result.items.length < _limit || result.items.isEmpty,
-        );
-      } else if (state is FixturesSuccess) {
-        final current = state as FixturesSuccess;
-        final newItems = [...current.fixtures.items, ...result.items];
-        state = FixturesSuccess(
-          PaginatedFixtures(
-            items: newItems,
-            limit: result.limit,
-            offset: result.offset,
-            total: result.total,
-          ),
-          newItems.length >= result.total || result.items.length < _limit,
-        );
-      }
-      _offset += result.items.length;
-      _hasReachedMax = result.items.length < _limit;
-    } on FixtureNotFoundException {
-      state = const FixturesError('No se encontraron partidos');
+      state = FixturesSuccess(result, true);
     } on UnauthorizedException {
       state = const FixturesError('Error de credenciales');
     } on ServerException catch (e) {
@@ -91,33 +48,7 @@ class FixturesNotifier extends StateNotifier<FixturesState> {
     }
   }
 
-  Future<void> loadMore({
-    int? competitionId,
-    int? seasonId,
-    int? teamId,
-    DateTime? from,
-    DateTime? to,
-    bool includeMetrics = false,
-    bool includePrediction = false,
-  }) async {
-    if (state is FixturesLoading || _hasReachedMax) return;
-    await loadUpcoming(
-      competitionId: competitionId,
-      seasonId: seasonId,
-      teamId: teamId,
-      from: from,
-      to: to,
-      includeMetrics: includeMetrics,
-      includePrediction: includePrediction,
-      refresh: false,
-    );
-  }
-
-  void reset() {
-    _offset = 0;
-    _hasReachedMax = false;
-    state = const FixturesInitial();
-  }
+  void reset() => state = const FixturesInitial();
 }
 
 class FixtureDetailNotifier extends StateNotifier<FixtureDetailState> {
@@ -125,17 +56,13 @@ class FixtureDetailNotifier extends StateNotifier<FixtureDetailState> {
 
   final FixturesRepository _repository;
 
-  Future<void> loadFixture(
-    int fixtureId, {
-    bool includeMetrics = true,
-    bool includePrediction = true,
-  }) async {
+  Future<void> loadFixture(int fixtureId) async {
     state = const FixtureDetailLoading();
     try {
       final fixture = await _repository.getFixture(
         fixtureId,
-        includeMetrics: includeMetrics,
-        includePrediction: includePrediction,
+        includeMetrics: true,
+        includePrediction: true,
       );
       state = FixtureDetailSuccess(fixture);
     } on FixtureNotFoundException {

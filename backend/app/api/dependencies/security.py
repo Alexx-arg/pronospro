@@ -91,4 +91,46 @@ async def require_api_key_dep(
     await _require_api_key_dependency(api_key)
 
 
-__all__ = ["api_key_header", "require_api_key_dep"]
+# Separate admin key header: protects operational endpoints (sync jobs).
+admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
+
+
+def _expected_admin_key() -> str | None:
+    env_key = os.getenv("ADMIN_API_KEY")
+    if env_key:
+        return env_key
+    try:
+        return get_settings().admin_api_key
+    except Exception:
+        return None
+
+
+async def require_admin_key_dep(
+    admin_key: str | None = Depends(admin_key_header),  # noqa: B008
+) -> None:
+    """Validate ``X-Admin-Key`` against ``ADMIN_API_KEY`` (fail-open in dev)."""
+    expected = _expected_admin_key()
+    if not expected:
+        try:
+            env = get_settings().env
+        except Exception:
+            env = "development"
+        if env == "production":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="ADMIN_API_KEY not configured in production",
+            )
+        return
+    if not admin_key or admin_key != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing Admin Key",
+        )
+
+
+__all__ = [
+    "admin_key_header",
+    "api_key_header",
+    "require_admin_key_dep",
+    "require_api_key_dep",
+]

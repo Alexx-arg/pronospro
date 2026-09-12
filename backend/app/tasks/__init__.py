@@ -24,6 +24,7 @@ those belong to later phases.
 from __future__ import annotations
 
 from app.tasks.sync_finished import run_sync_finished
+from app.tasks.sync_full import run_sync_full
 from app.tasks.sync_injuries import run_sync_injuries
 from app.tasks.sync_lineups import run_sync_lineups
 from app.tasks.sync_player_statistics import run_sync_player_statistics
@@ -33,6 +34,7 @@ from app.tasks.sync_upcoming import run_sync_upcoming
 
 __all__ = [
     "run_sync_finished",
+    "run_sync_full",
     "run_sync_injuries",
     "run_sync_lineups",
     "run_sync_player_statistics",

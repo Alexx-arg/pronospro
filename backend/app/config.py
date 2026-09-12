@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     # ---- kept for forward-compatibility with later phases (not used here) ----
     data_provider: str = Field(default="api_football", alias="DATA_PROVIDER")
 
+    # ----- Bzzoiro provider (data source de fixtures/teams/stats) -----
+    bzzoiro_api_key: str = Field(default="", alias="BZZOIRO_API_KEY")
+    bzzoiro_base_url: str = Field(
+        default="https://sports.bzzoiro.com/api/v2",
+        alias="BZZOIRO_API_URL",
+    )
+    bzzoiro_model: str = Field(default="muse-spark-1.2-free", alias="BZZOIRO_MODEL")
+
     # ----- NVIDIA NIM Explanation Service -----
     nvidia_api_key: str | None = Field(default=None, alias="NVIDIA_API_KEY")
     nvidia_base_url: str = Field(

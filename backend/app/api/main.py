@@ -90,13 +90,13 @@ def create_app() -> FastAPI:
 
     from app.api.routers.predict import router as predict_router
     from app.api.routers.fixtures import router as fixtures_router
+    from app.api.routers.explain import router as explain_router
+    from app.api.routers.admin import router as admin_router
 
     app.include_router(predict_router, prefix="/api/v1")
     app.include_router(fixtures_router, prefix="/api/v1")
-
-    from app.api.routers.explain import router as explain_router
-
     app.include_router(explain_router, prefix="/api/v1")
+    app.include_router(admin_router, prefix="/api/v1")
 
     @app.get("/health")
     def health() -> dict[str, Any]:

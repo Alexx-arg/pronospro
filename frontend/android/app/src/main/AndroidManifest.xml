@@ -2,7 +2,7 @@
     <!-- Permiso de red + cleartext HTTP para backend local sin TLS -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="football_prediction_app"
+        android:label="PronosPro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

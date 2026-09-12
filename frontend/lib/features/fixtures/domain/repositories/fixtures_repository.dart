@@ -9,12 +9,13 @@ abstract class FixturesRepository {
     int? competitionId,
     int? seasonId,
     int? teamId,
+    DateTime? date,
     DateTime? from,
     DateTime? to,
-    int limit = 20,
+    int limit = 50,
     int offset = 0,
-    bool includeMetrics = false,
-    bool includePrediction = false,
+    bool includeMetrics = true,
+    bool includePrediction = true,
   });
 
   Future<FixtureResponse> getFixture(
@@ -34,12 +35,13 @@ class FixturesRepositoryImpl implements FixturesRepository {
     int? competitionId,
     int? seasonId,
     int? teamId,
+    DateTime? date,
     DateTime? from,
     DateTime? to,
-    int limit = 20,
+    int limit = 50,
     int offset = 0,
-    bool includeMetrics = false,
-    bool includePrediction = false,
+    bool includeMetrics = true,
+    bool includePrediction = true,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -51,10 +53,14 @@ class FixturesRepositoryImpl implements FixturesRepository {
       if (competitionId != null) queryParams['competition_id'] = competitionId;
       if (seasonId != null) queryParams['season_id'] = seasonId;
       if (teamId != null) queryParams['team_id'] = teamId;
-      if (from != null) queryParams['from'] = from.toIso8601String();
-      if (to != null) queryParams['to'] = to.toIso8601String();
+      if (date != null) {
+        queryParams['date'] = _toDateParam(date);
+      } else {
+        if (from != null) queryParams['from'] = from.toIso8601String();
+        if (to != null) queryParams['to'] = to.toIso8601String();
+      }
 
-      final response = await apiClient.dio.get(
+      final response = await apiClient.dio.get<Map<String, dynamic>>(
         '/api/v1/fixtures/upcoming',
         queryParameters: queryParams,
       );
@@ -82,7 +88,7 @@ class FixturesRepositoryImpl implements FixturesRepository {
     bool includePrediction = true,
   }) async {
     try {
-      final response = await apiClient.dio.get(
+      final response = await apiClient.dio.get<Map<String, dynamic>>(
         '/api/v1/fixtures/$fixtureId',
         queryParameters: {
           'include_metrics': includeMetrics,
@@ -121,5 +127,12 @@ class FixturesRepositoryImpl implements FixturesRepository {
       default:
         return ServerException('Unexpected status $statusCode: $message');
     }
+  }
+
+  static String _toDateParam(DateTime d) {
+    final local = d.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd';
   }
 }

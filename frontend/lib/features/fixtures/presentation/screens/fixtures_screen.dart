@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
-import 'package:football_prediction_app/core/network/api_client.dart';
 import 'package:football_prediction_app/features/fixtures/fixtures.dart';
 
 class FixturesScreen extends ConsumerStatefulWidget {
@@ -13,55 +11,24 @@ class FixturesScreen extends ConsumerStatefulWidget {
 }
 
 class _FixturesScreenState extends ConsumerState<FixturesScreen> {
-  final ScrollController _scrollController = ScrollController();
-  int? _selectedLeagueId;
-  final Map<int, String> _leagueNames = const {
-    39: 'Premier League',
-    140: 'La Liga',
-    135: 'Serie A',
-    78: 'Bundesliga',
-    61: 'Ligue 1',
-  };
+  int _offset = 0; // -1 ayer, 0 hoy, +n
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
-    _loadFixtures();
+    _load();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  DateTime _selectedDay() => DateTime.now().add(Duration(days: _offset));
+
+  void _load() {
+    ref.read(fixturesNotifierProvider.notifier).loadForDate(_selectedDay());
+    ref.read(selectedDateProvider.notifier).state = _offset;
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMore();
-    }
-  }
-
-  void _loadFixtures({bool refresh = false}) {
-    ref.read(fixturesNotifierProvider.notifier).loadUpcoming(
-      competitionId: _selectedLeagueId,
-      from: DateTime.now().subtract(const Duration(days: 1)),
-      to: DateTime.now().add(const Duration(days: 7)),
-      includeMetrics: true,
-      includePrediction: true,
-      refresh: refresh,
-    );
-  }
-
-  void _loadMore() {
-    ref.read(fixturesNotifierProvider.notifier).loadMore(
-      competitionId: _selectedLeagueId,
-      from: DateTime.now().subtract(const Duration(days: 1)),
-      to: DateTime.now().add(const Duration(days: 7)),
-      includeMetrics: true,
-      includePrediction: true,
-    );
+  void _setDay(int offset) {
+    setState(() => _offset = offset);
+    _load();
   }
 
   @override
@@ -70,77 +37,145 @@ class _FixturesScreenState extends ConsumerState<FixturesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Próximos Partidos'),
+        title: const Text('PronosPro'),
+        centerTitle: false,
         actions: [
-          PopupMenuButton<int?>(
-            initialValue: _selectedLeagueId,
-            onSelected: (value) {
-              setState(() {
-                _selectedLeagueId = value;
-              });
-              _loadFixtures(refresh: true);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem<int?>(
-                value: null,
-                child: Text('Todas las ligas'),
-              ),
-              ..._leagueNames.entries.map(
-                (e) => PopupMenuItem<int?>(
-                  value: e.key,
-                  child: Text(e.value),
-                ),
-              ),
-            ],
-            icon: const Icon(Icons.filter_list),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _load,
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => _loadFixtures(refresh: true),
-        child: _buildBody(state),
+      body: Column(
+        children: [
+          DateSelectorBar(
+            offset: _offset,
+            onSelect: _setDay,
+          ),
+          Expanded(child: _buildBody(state)),
+        ],
       ),
     );
   }
 
   Widget _buildBody(FixturesState state) {
     return switch (state) {
-      FixturesInitial() => const Center(
-          child: Text('Cargando partidos...'),
-        ),
+      FixturesInitial() => const Center(child: CircularProgressIndicator()),
       FixturesLoading() => const Center(child: CircularProgressIndicator()),
-      FixturesSuccess(:final fixtures, :final hasReachedMax) => fixtures.items.isEmpty
-          ? const Center(
-              child: Text('No hay partidos programados para esta liga'),
-            )
-          : ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(12),
-              itemCount: fixtures.items.length + (hasReachedMax ? 0 : 1),
-              itemBuilder: (context, index) {
-                if (index >= fixtures.items.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final fixture = fixtures.items[index];
-                return FixtureCard(fixture: fixture);
-              },
-            ),
-      FixturesError(:final message) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(message, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadFixtures,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
+      FixturesSuccess(:final fixtures) => fixtures.items.isEmpty
+          ? const _EmptyState()
+          : _buildGroupedList(fixtures),
+      FixturesError(:final message) => _ErrorState(message: message, onRetry: _load),
     };
+  }
+
+  Widget _buildGroupedList(PaginatedFixtures paginated) {
+    final grouped = paginated.groupedByCompetition();
+    final compNames = {for (final f in paginated.items) f.competition.id: f.competition};
+
+    final items = <Widget>[];
+    grouped.forEach((compId, fixtures) {
+      fixtures.sort((a, b) => a.kickoffTime.compareTo(b.kickoffTime));
+      final comp = compNames[compId]!;
+      items.add(_LeagueHeader(competition: comp));
+      for (final f in fixtures) {
+        items.add(FixtureCard(fixture: f));
+      }
+    });
+
+    return RefreshIndicator(
+      onRefresh: () async => _load(),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+        children: items,
+      ),
+    );
+  }
+}
+
+class _LeagueHeader extends StatelessWidget {
+  const _LeagueHeader({required this.competition});
+
+  final CompetitionInfo competition;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+      child: Row(
+        children: [
+          if (competition.logo != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                competition.logo!,
+                width: 22,
+                height: 22,
+                errorBuilder: (_, __, ___) => const Icon(Icons.emoji_events, size: 22),
+              ),
+            )
+          else
+            const Icon(Icons.emoji_events, size: 22, color: Colors.amber),
+          const SizedBox(width: 8),
+          Text(
+            competition.name,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: scheme.primary,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sports_soccer, size: 56, color: Colors.grey),
+          const SizedBox(height: 12),
+          Text(
+            'No hay partidos para esta fecha',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Deslizá para recargar o seleccioná otro día',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 56, color: Colors.redAccent),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: onRetry, child: const Text('Reintentar')),
+        ],
+      ),
+    );
   }
 }
